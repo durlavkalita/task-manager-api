@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
 from app import crud, models, schemas, database
@@ -9,9 +11,12 @@ router = APIRouter(
     tags=["Tasks"]
 )
 
+limiter = Limiter(key_func=get_remote_address)
+
 # Create Task
 @router.post("/", response_model=schemas.TaskResponse)
-def create_task(task: schemas.TaskCreate, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("5/minute")
+def create_task(request: Request, task: schemas.TaskCreate, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
     return crud.create_task(db=db, task=task, current_user=current_user.id)
 
 # Get Task by ID
@@ -37,7 +42,8 @@ def update_task(task_id: int, task_update: schemas.TaskUpdate, db: Session = Dep
 
 # Delete Task
 @router.delete("/{task_id}", response_model=schemas.TaskResponse)
-def delete_task(task_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("3/minute")
+def delete_task(request: Request,task_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(get_current_user)):
     deleted_task = crud.delete_task(db=db, task_id=task_id, current_user=current_user)
     if not deleted_task:
         raise HTTPException(status_code=404, detail="Task not found")
